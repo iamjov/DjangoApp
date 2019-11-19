@@ -1,0 +1,45 @@
+trigger:
+  - develop
+
+pool:
+  vmImage: 'ubuntu-latest'
+strategy:
+  matrix:
+    Python37:
+      PYTHON_VERSION: '3.7'
+  maxParallel: 3
+
+steps:
+  - task: UsePythonVersion@0
+    inputs:
+      versionSpec: '$(PYTHON_VERSION)'
+      architecture: 'x64'
+
+  - task: PythonScript@0
+    displayName: 'Export project path'
+    inputs:
+      scriptSource: 'inline'
+      script: |
+        """Search all subdirectories for `manage.py`."""
+        from glob import iglob
+        from os import path
+        # Python >= 3.5
+        manage_py = next(iglob(path.join('**', 'manage.py'), recursive=True), None)
+        if not manage_py:
+            raise SystemExit('Could not find a Django project')
+        project_location = path.dirname(path.abspath(manage_py))
+        print('Found Django project in', project_location)
+        print('##vso[task.setvariable variable=projectRoot]{}'.format(project_location))
+
+  - script: |
+      pip install django
+      pip install selenium
+      python manage.py makemigrations
+      python manage.py migrate
+      chmod 755 -R '$(projectRoot)'/selenium_test
+    displayName: 'Install prerequisites'
+
+  - script: |
+      cd '$(projectRoot)'
+      python manage.py test selenium_test
+    displayName: 'Run tests'
